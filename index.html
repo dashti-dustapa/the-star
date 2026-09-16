@@ -1789,5 +1789,1209 @@
     }, 180);
   })();
 </script>
+<!-- PART 3: Visual cinematic + anti-boredom gameplay layer -->
+<style>
+  body.p3-cine #overlay {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  #p3-cinematic {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    background: #000;
+    transition: opacity .8s ease;
+  }
+
+  #p3-cinematic.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #p3-cine-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .p3-cine-bar {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 10vh;
+    background: #000;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  #p3-cine-bar-top { top: 0; }
+  #p3-cine-bar-bottom { bottom: 0; }
+
+  #p3-cine-sub {
+    position: absolute;
+    bottom: 14vh;
+    width: 100%;
+    text-align: center;
+    z-index: 5;
+    color: #fff;
+    font-size: 30px;
+    font-weight: 600;
+    text-shadow:
+      0 0 18px rgba(150,220,255,.25),
+      0 3px 18px rgba(0,0,0,.95);
+    padding: 0 5vw;
+  }
+
+  #p3-cine-title {
+    position: absolute;
+    top: 34%;
+    width: 100%;
+    text-align: center;
+    z-index: 5;
+    font-size: 72px;
+    font-weight: 900;
+    color: #ffd98a;
+    opacity: 0;
+    transition: opacity 1s ease;
+    text-shadow:
+      0 0 40px rgba(255,210,100,.35),
+      0 4px 30px rgba(0,0,0,.95);
+    pointer-events: none;
+  }
+
+  #p3-cine-skip,
+  #p3-cine-enter {
+    position: absolute;
+    z-index: 10;
+    border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    border-radius: 12px;
+    padding: 12px 22px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: .22s ease;
+    backdrop-filter: blur(6px);
+  }
+
+  #p3-cine-skip:hover,
+  #p3-cine-enter:hover {
+    transform: translateY(-2px) scale(1.03);
+    background: rgba(255,255,255,.14);
+    box-shadow: 0 0 22px rgba(160,220,255,.16);
+  }
+
+  #p3-cine-skip {
+    right: 18px;
+    bottom: 18px;
+  }
+
+  #p3-cine-enter {
+    left: 50%;
+    bottom: 18vh;
+    transform: translateX(-50%);
+    display: none;
+    border-color: rgba(255,215,120,.55);
+    background: rgba(255,215,120,.14);
+    color: #ffe8b0;
+    font-weight: 800;
+  }
+
+  #p3-quest-panel {
+    position: fixed;
+    top: 95px;
+    right: 18px;
+    width: min(330px, 92vw);
+    z-index: 46;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(18px);
+    transition: .32s ease;
+    background: rgba(5,10,18,.55);
+    border: 1px solid rgba(160,220,255,.14);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 28px rgba(0,0,0,.28);
+    padding: 14px;
+    color: #e8f1ff;
+  }
+
+  #p3-quest-panel.show {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .p3-panel-title {
+    font-weight: 900;
+    color: #ffd98a;
+    margin-bottom: 10px;
+    font-size: 18px;
+  }
+
+  .p3-quest-line {
+    margin: 7px 0;
+    color: #d9e5ff;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .p3-quest-done {
+    color: #95ffb8;
+  }
+
+  #p3-stats {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 40;
+    pointer-events: none;
+    display: grid;
+    gap: 6px;
+    min-width: 180px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(4,8,14,.42);
+    border: 1px solid rgba(170,220,255,.12);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    box-shadow: 0 0 22px rgba(0,0,0,.25);
+  }
+
+  #p3-score { color: #9df2ff; font-weight: 800; }
+  #p3-blessings { color: #ffe19b; }
+  #p3-time { color: #c9d8ff; opacity: .9; }
+
+  #p3-center {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 18vh;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  .p3-card {
+    display: none;
+    max-width: min(680px, 92vw);
+    background: rgba(3,6,12,.62);
+    border: 1px solid rgba(255,225,140,.16);
+    border-radius: 18px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+      0 0 35px rgba(0,0,0,.42),
+      0 0 25px rgba(130,220,255,.08);
+    padding: 22px;
+    text-align: center;
+    color: #fff;
+  }
+
+  .p3-card-title {
+    font-size: 26px;
+    font-weight: 900;
+    color: #ffd98a;
+    margin-bottom: 12px;
+  }
+
+  .p3-seq {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 18px 0;
+    flex-wrap: wrap;
+  }
+
+  .p3-seq span {
+    min-width: 56px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.06);
+    font-size: 26px;
+    font-weight: 900;
+    color: #dfeaff;
+    transition: .18s ease;
+  }
+
+  .p3-seq span.current {
+    border-color: rgba(140,230,255,.75);
+    box-shadow: 0 0 18px rgba(120,230,255,.25);
+    transform: translateY(-2px);
+  }
+
+  .p3-seq span.done {
+    border-color: rgba(120,255,170,.65);
+    color: #aaffc3;
+  }
+
+  .p3-small {
+    color: #b8c7ea;
+    font-size: 14px;
+  }
+
+  .p3-choices {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 17px;
+  }
+
+  .p3-choices span {
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(255,255,255,.05);
+  }
+
+  #p3-toasts {
+    position: fixed;
+    top: 92px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+    width: min(620px, 92vw);
+  }
+
+  .p3-toast {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: .35s ease;
+    padding: 12px 16px;
+    border-radius: 14px;
+    text-align: center;
+    color: #fff;
+    background: rgba(5,10,18,.62);
+    border: 1px solid rgba(180,220,255,.14);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 22px rgba(0,0,0,.28);
+  }
+
+  .p3-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .p3-toast.good {
+    border-color: rgba(120,255,180,.25);
+    color: #c9ffd9;
+  }
+
+  .p3-toast.bad {
+    border-color: rgba(255,90,110,.25);
+    color: #ffd3da;
+  }
+
+  body.p3-blessed canvas {
+    filter: saturate(1.22) brightness(1.05);
+  }
+
+  body.p3-danger canvas {
+    filter: saturate(1.4) contrast(1.08);
+  }
+
+  @media (max-width: 800px) {
+    #p3-cine-title { font-size: 44px; }
+    #p3-cine-sub { font-size: 20px; }
+    #p3-stats { min-width: 140px; font-size: 13px; }
+  }
+</style>
+
+<div id="p3-cinematic">
+  <canvas id="p3-cine-canvas"></canvas>
+
+  <div id="p3-cine-bar-top" class="p3-cine-bar"></div>
+  <div id="p3-cine-bar-bottom" class="p3-cine-bar"></div>
+
+  <div id="p3-cine-title">THE LOST STAR</div>
+  <div id="p3-cine-sub"></div>
+
+  <button id="p3-cine-skip">Skip ▸</button>
+  <button id="p3-cine-enter">Enter the World</button>
+</div>
+
+<div id="p3-quest-panel"></div>
+
+<div id="p3-stats">
+  <div id="p3-score">Score 0</div>
+  <div id="p3-blessings">Blessings 0</div>
+  <div id="p3-time">0:00</div>
+</div>
+
+<div id="p3-center">
+  <div id="p3-trial" class="p3-card"></div>
+  <div id="p3-event" class="p3-card"></div>
+</div>
+
+<div id="p3-toasts"></div>
+
+<script type="module">
+(() => {
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+
+  if (!overlay || !startBtn) return;
+
+  const p2Story = document.getElementById('p2-story-overlay');
+  if (p2Story) p2Story.classList.add('hidden');
+  document.body.classList.remove('p2-story');
+
+  const cine = document.getElementById('p3-cinematic');
+  const canvas = document.getElementById('p3-cine-canvas');
+  const subEl = document.getElementById('p3-cine-sub');
+  const titleEl = document.getElementById('p3-cine-title');
+  const skipBtn = document.getElementById('p3-cine-skip');
+  const enterBtn = document.getElementById('p3-cine-enter');
+  const hintEl = document.getElementById('hint');
+  const ctx = canvas.getContext('2d');
+
+  let w = innerWidth;
+  let h = innerHeight;
+  let cineDone = false;
+  let finished = false;
+  const startTime = performance.now();
+  const DURATION = 31;
+
+  overlay.classList.add('hidden');
+  document.body.classList.add('p3-cine');
+
+  function resize() {
+    w = innerWidth;
+    h = innerHeight;
+    canvas.width = w;
+    canvas.height = h;
+  }
+
+  resize();
+  addEventListener('resize', resize);
+
+  const bgStars = Array.from({ length: 170 }, () => ({
+    x: Math.random(),
+    y: Math.random() * 0.68,
+    r: Math.random() * 1.5 + 0.3,
+    tw: Math.random() * Math.PI * 2
+  }));
+
+  const memoryParticles = Array.from({ length: 85 }, () => ({
+    x: Math.random(),
+    y: 0.52 + Math.random() * 0.34,
+    r: Math.random() * 2.2 + 0.7,
+    s: Math.random() * 0.02 + 0.006
+  }));
+
+  const subs = [
+    { start: 0, end: 6, text: 'Long ago, a golden star watched over the valley.' },
+    { start: 6, end: 12, text: 'Then the star fell, and the lights began to die.' },
+    { start: 12, end: 18, text: 'The Shadow of Memory fed on everything forgotten.' },
+    { start: 18, end: 25, text: 'But one keeper still heard its last call.' },
+    { start: 25, end: 32, text: 'Find the shards. Restore the star.' }
+  ];
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+  }
+
+  function drawBgStars(t) {
+    for (const s of bgStars) {
+      s.tw += 0.01;
+      const alpha = 0.18 + Math.abs(Math.sin(s.tw)) * 0.45;
+      ctx.fillStyle = `rgba(220,235,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawMountains(color, base, amp, speed, t) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+
+    for (let x = 0; x <= w; x += 12) {
+      const y =
+        base +
+        Math.sin(x * 0.004 + speed) * amp +
+        Math.sin(x * 0.013 + speed * 2.3) * amp * 0.35;
+
+      ctx.lineTo(x, y);
+    }
+
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawStarShape(x, y, r, glow, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.shadowBlur = glow;
+    ctx.shadowColor = 'rgba(255,215,120,.95)';
+    ctx.fillStyle = '#ffe7a0';
+
+    ctx.beginPath();
+
+    for (let i = 0; i < 10; i++) {
+      const rad = i % 2 === 0 ? r : r * 0.42;
+      const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+    }
+
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawVillage(amount, t) {
+    if (amount <= 0) return;
+
+    for (let i = 0; i < 12; i++) {
+      const x = w * (0.12 + i * 0.065);
+      const y = h * 0.78 + Math.sin(i * 3.7) * 10;
+      const flicker = 0.4 + 0.6 * Math.sin(t * 4 + i * 1.9);
+
+      ctx.fillStyle = 'rgba(15,18,28,.9)';
+      ctx.fillRect(x, y, 16, 12);
+
+      ctx.fillStyle = `rgba(255,190,90,${amount * flicker})`;
+      ctx.fillRect(x + 4, y + 4, 4, 4);
+      ctx.fillRect(x + 9, y + 4, 3, 4);
+    }
+  }
+
+  function drawShadowFog(p, t) {
+    for (let i = 0; i < 12; i++) {
+      const bx = w * (1 - p * 0.65 + Math.sin(t * 0.55 + i * 1.7) * 0.045);
+      const by = h * (0.26 + i * 0.05);
+      const r = Math.max(40, w * (0.075 + i * 0.014));
+
+      const grad = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+      grad.addColorStop(0, `rgba(25,6,40,${0.16 + p * 0.16})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(bx, by, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawMemoryParticles(t, p) {
+    for (const m of memoryParticles) {
+      m.y -= m.s;
+
+      if (m.y < 0.18) {
+        m.y = 0.86;
+      }
+
+      const alpha = (1 - p) * 0.7;
+      const x = m.x * w + Math.sin(t * 2 + m.x * 20) * 8;
+      const y = m.y * h;
+
+      ctx.fillStyle = `rgba(180,235,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawRojin(x, y, t, p) {
+    ctx.save();
+    ctx.translate(x, y + Math.sin(t * 2.1) * 2.5);
+
+    ctx.fillStyle = '#02040a';
+
+    ctx.beginPath();
+    ctx.moveTo(0, -40);
+    ctx.quadraticCurveTo(22, -8, 14, 38);
+    ctx.lineTo(-14, 38);
+    ctx.quadraticCurveTo(-22, -8, 0, -40);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, -50, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    const lx = 24;
+    const ly = 0;
+
+    const glow = ctx.createRadialGradient(lx, ly, 0, lx, ly, 42);
+    glow.addColorStop(0, 'rgba(255,215,120,.85)');
+    glow.addColorStop(1, 'rgba(255,215,120,0)');
+
+    ctx.fillStyle = glow;
+    ctx.fillRect(lx - 42, ly - 42, 84, 84);
+
+    ctx.fillStyle = '#ffd78a';
+    ctx.fillRect(lx - 3, ly - 6, 6, 12);
+
+    ctx.restore();
+  }
+
+  function drawPathShards(p, t) {
+    for (let i = 0; i < 5; i++) {
+      const pp = clamp01(p * 1.4 - i * 0.12);
+      if (pp <= 0) continue;
+
+      const x = lerp(w * 0.32, w * 0.62, i / 4);
+      const y = h * 0.79 - Math.sin(i * 2.1) * 8;
+      const alpha = pp * (0.55 + Math.sin(t * 3 + i) * 0.2);
+
+      drawStarShape(x, y, 7, 20, alpha);
+    }
+  }
+
+  function drawScene(t) {
+    ctx.clearRect(0, 0, w, h);
+
+    const phase =
+      t < 6 ? 0 :
+      t < 12 ? 1 :
+      t < 18 ? 2 :
+      t < 25 ? 3 : 4;
+
+    let top;
+    let bottom;
+
+    if (phase === 0) {
+      top = '#081326';
+      bottom = '#123048';
+    } else if (phase === 1) {
+      top = '#071022';
+      bottom = '#252033';
+    } else if (phase === 2) {
+      top = '#040409';
+      bottom = '#190d24';
+    } else if (phase === 3) {
+      top = '#050711';
+      bottom = '#142038';
+    } else {
+      top = '#02040a';
+      bottom = '#0b1630';
+    }
+
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, top);
+    sky.addColorStop(1, bottom);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+
+    drawBgStars(t);
+
+    drawMountains('#04070d', h * 0.72, 42, 1.2, t);
+    drawMountains('#070b14', h * 0.80, 28, 2.8, t);
+
+    if (phase === 0) {
+      drawStarShape(w * 0.72, h * 0.22, 17, 55, 1);
+      drawVillage(1, t);
+      titleEl.style.opacity = '0';
+    }
+
+    if (phase === 1) {
+      const p = clamp01((t - 6) / 6);
+
+      const sx = lerp(w * 0.72, w * 0.52, p);
+      const sy = lerp(h * 0.22, h * 0.72, p * p);
+
+      const tx = lerp(w * 0.72, sx, 0.85);
+      const ty = lerp(h * 0.22, sy, 0.82);
+
+      const grad = ctx.createLinearGradient(tx, ty, sx, sy);
+      grad.addColorStop(0, 'rgba(255,220,130,0)');
+      grad.addColorStop(1, 'rgba(255,220,130,.5)');
+
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(sx, sy);
+      ctx.stroke();
+
+      drawStarShape(sx, sy, 15, 45, 1 - p * 0.25);
+      drawVillage(1 - p, t);
+      titleEl.style.opacity = '0';
+    }
+
+    if (phase === 2) {
+      const p = clamp01((t - 12) / 6);
+
+      drawStarShape(w * 0.52, h * 0.72, 9, 18, 0.35);
+      drawVillage(0.14, t);
+      drawShadowFog(p, t);
+      drawMemoryParticles(t, p);
+      titleEl.style.opacity = '0';
+    }
+
+    if (phase === 3) {
+      const p = clamp01((t - 18) / 7);
+
+      drawStarShape(w * 0.52, h * 0.72, 8, 16, 0.25);
+      drawVillage(0.1, t);
+      drawShadowFog(1 - p * 0.25, t);
+      drawRojin(lerp(w * 0.18, w * 0.26, p), h * 0.77, t, p);
+      drawPathShards(p, t);
+      titleEl.style.opacity = '0';
+    }
+
+    if (phase === 4) {
+      drawStarShape(w * 0.5, h * 0.36, 30, 95, 1);
+      drawVillage(0.25, t);
+      titleEl.style.opacity = '1';
+    }
+  }
+
+  function updateSub(t) {
+    const current = subs.find(s => t >= s.start && t < s.end);
+    subEl.textContent = current ? current.text : '';
+  }
+
+  function animate(now) {
+    if (finished) return;
+
+    const t = (now - startTime) / 1000;
+    const tt = Math.min(t, DURATION);
+
+    drawScene(tt);
+    updateSub(tt);
+
+    if (t >= DURATION) {
+      enterBtn.style.display = 'block';
+      return;
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+
+  const questPanel = document.getElementById('p3-quest-panel');
+  const scoreEl = document.getElementById('p3-score');
+  const blessingsEl = document.getElementById('p3-blessings');
+  const timeEl = document.getElementById('p3-time');
+  const trialEl = document.getElementById('p3-trial');
+  const eventEl = document.getElementById('p3-event');
+  const toastsEl = document.getElementById('p3-toasts');
+  const shardsEl = document.getElementById('shards');
+  const messageEl = document.getElementById('message');
+  const objectiveEl = document.getElementById('objective');
+
+  const p3State = {
+    locked: false,
+    score: 0,
+    blessings: 0,
+    trialsDone: 0,
+    whispers: 0,
+    surviveTime: 0,
+    combo: 0,
+    lastShardTime: 0,
+    lastEvent: performance.now(),
+    trial: null,
+    event: null,
+    questOpen: false,
+    lastCount: 0
+  };
+
+  function notify(text, kind = 'info') {
+    if (!toastsEl) return;
+
+    const el = document.createElement('div');
+    el.className = `p3-toast ${kind}`;
+    el.textContent = text;
+
+    toastsEl.appendChild(el);
+
+    requestAnimationFrame(() => {
+      el.classList.add('show');
+    });
+
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 400);
+    }, 4200);
+  }
+
+  function getShardInfo() {
+    const txt = shardsEl ? shardsEl.textContent : '0 / 12';
+    const m = txt.match(/(\d+)\s*\/\s*(\d+)/);
+
+    return {
+      c: m ? parseInt(m[1], 10) : 0,
+      t: m ? parseInt(m[2], 10) : 12
+    };
+  }
+
+  function updateStats() {
+    if (scoreEl) scoreEl.textContent = `Score ${p3State.score}`;
+    if (blessingsEl) blessingsEl.textContent = `Blessings ${p3State.blessings}`;
+
+    if (timeEl) {
+      const mins = Math.floor(p3State.surviveTime / 60);
+      const secs = String(p3State.surviveTime % 60).padStart(2, '0');
+      timeEl.textContent = `${mins}:${secs}`;
+    }
+
+    updateQuestPanel();
+  }
+
+  function updateQuestPanel() {
+    if (!questPanel) return;
+
+    const shard = getShardInfo();
+    const objectiveText = objectiveEl ? objectiveEl.textContent : '';
+    const returned = objectiveText.toLowerCase().includes('restored');
+
+    const q1Done = shard.c >= shard.t;
+    const q2Done = returned || objectiveText.toLowerCase().includes('restore');
+    const q3Done = p3State.surviveTime >= 180;
+    const q4Done = p3State.trialsDone >= 2;
+    const q5Done = p3State.whispers >= 3;
+
+    questPanel.innerHTML = `
+      <div class="p3-panel-title">Quest Log</div>
+      <div class="p3-quest-line ${q1Done ? 'p3-quest-done' : ''}">
+        ${q1Done ? '✅' : '⬜'} Collect the Light Shards: ${shard.c}/${shard.t}
+      </div>
+      <div class="p3-quest-line ${q2Done ? 'p3-quest-done' : ''}">
+        ${q2Done ? '✅' : '⬜'} Restore the Lost Star
+      </div>
+      <div class="p3-quest-line ${q3Done ? 'p3-quest-done' : ''}">
+        ${q3Done ? '✅' : '⬜'} Survive the night for 3 minutes
+      </div>
+      <div class="p3-quest-line ${q4Done ? 'p3-quest-done' : ''}">
+        ${q4Done ? '✅' : '⬜'} Complete 2 Memory Trials
+      </div>
+      <div class="p3-quest-line ${q5Done ? 'p3-quest-done' : ''}">
+        ${q5Done ? '✅' : '⬜'} Answer 3 Whispers
+      </div>
+      <div class="p3-small" style="margin-top:10px;">
+        Press Q to hide/show this panel.
+      </div>
+    `;
+  }
+
+  function toggleQuest() {
+    if (!questPanel) return;
+    p3State.questOpen = !p3State.questOpen;
+    questPanel.classList.toggle('show', p3State.questOpen);
+    updateQuestPanel();
+  }
+
+  function blessScreen() {
+    document.body.classList.add('p3-blessed');
+    setTimeout(() => {
+      document.body.classList.remove('p3-blessed');
+    }, 12000);
+  }
+
+  const trialKeys = ['KeyF', 'KeyR', 'KeyG', 'KeyV', 'KeyB'];
+
+  const keyNames = {
+    KeyF: 'F',
+    KeyR: 'R',
+    KeyG: 'G',
+    KeyV: 'V',
+    KeyB: 'B'
+  };
+
+  function clearTrial() {
+    if (p3State.trial) {
+      clearTimeout(p3State.trial.timeout);
+      p3State.trial = null;
+    }
+
+    if (trialEl) trialEl.style.display = 'none';
+  }
+
+  function clearEvent() {
+    if (p3State.event) {
+      clearTimeout(p3State.event.timeout);
+      p3State.event = null;
+    }
+
+    if (eventEl) eventEl.style.display = 'none';
+  }
+
+  function renderTrial() {
+    if (!p3State.trial || !trialEl) return;
+
+    const seqHtml = p3State.trial.seq
+      .map((k, i) => {
+        const done = i < p3State.trial.idx ? 'done' : '';
+        const current = i === p3State.trial.idx ? 'current' : '';
+        return `<span class="${done} ${current}">${keyNames[k]}</span>`;
+      })
+      .join('');
+
+    trialEl.innerHTML = `
+      <div class="p3-card-title">Memory Trial</div>
+      <div class="p3-seq">${seqHtml}</div>
+      <div class="p3-small">Press the glowing keys in order before the memory fades.</div>
+    `;
+  }
+
+  function startTrial() {
+    if (!trialEl || p3State.trial || p3State.event) return;
+
+    const length = Math.min(3 + Math.floor(p3State.trialsDone / 2), 5);
+
+    const seq = Array.from({ length }, () => {
+      return trialKeys[Math.floor(Math.random() * trialKeys.length)];
+    });
+
+    p3State.trial = {
+      seq,
+      idx: 0,
+      timeout: setTimeout(() => {
+        failTrial();
+      }, 6500)
+    };
+
+    trialEl.style.display = 'block';
+    renderTrial();
+  }
+
+  function successTrial() {
+    clearTrial();
+
+    p3State.score += 120;
+    p3State.blessings++;
+    p3State.trialsDone++;
+
+    notify('Memory Trial complete! +120', 'good');
+    blessScreen();
+    updateStats();
+  }
+
+  function failTrial() {
+    clearTrial();
+
+    p3State.score += 10;
+    notify('The memory slips away... +10', 'bad');
+    updateStats();
+  }
+
+  function handleTrialKey(code) {
+    if (!p3State.trial) return;
+
+    const expected = p3State.trial.seq[p3State.trial.idx];
+
+    if (code === expected) {
+      p3State.trial.idx++;
+
+      if (p3State.trial.idx >= p3State.trial.seq.length) {
+        successTrial();
+      } else {
+        renderTrial();
+      }
+    } else {
+      failTrial();
+    }
+  }
+
+  const whisperEvents = [
+    {
+      text: 'A blue moth circles your lantern, then drifts toward the dark.',
+      opt1: 'Follow the moth',
+      opt2: 'Stay on the path',
+      risk: 0.62,
+      safe: 0.85,
+      big: 95,
+      small: 50,
+      msgBig: 'The moth reveals a hidden memory. +95',
+      msgSafe: 'Your careful steps keep the light steady. +50',
+      msgFail: 'The moth fades into mist. +15'
+    },
+    {
+      text: 'A child’s memory sings from somewhere behind the trees.',
+      opt1: 'Listen closely',
+      opt2: 'Move quietly',
+      risk: 0.60,
+      safe: 0.82,
+      big: 90,
+      small: 45,
+      msgBig: 'The song strengthens your heart. +90',
+      msgSafe: 'You pass without breaking the memory. +45',
+      msgFail: 'The song stops suddenly. +15'
+    },
+    {
+      text: 'The Shadow watches you between the pines.',
+      opt1: 'Stand still',
+      opt2: 'Circle around',
+      risk: 0.55,
+      safe: 0.80,
+      big: 100,
+      small: 40,
+      msgBig: 'The Shadow looks away. You gain courage. +100',
+      msgSafe: 'You slip past the darkness. +40',
+      msgFail: 'Cold fear touches your back. +15'
+    },
+    {
+      text: 'A fallen rune stone glows faintly in the grass.',
+      opt1: 'Touch it',
+      opt2: 'Leave it',
+      risk: 0.58,
+      safe: 0.88,
+      big: 110,
+      small: 35,
+      msgBig: 'An old blessing enters your hand. +110',
+      msgSafe: 'Some memories are safer untouched. +35',
+      msgFail: 'The rune cracks into dust. +15'
+    }
+  ];
+
+  function renderEvent() {
+    if (!p3State.event || !eventEl) return;
+
+    const ev = p3State.event.ev;
+
+    eventEl.innerHTML = `
+      <div class="p3-card-title">Whisper</div>
+      <div>${ev.text}</div>
+      <div class="p3-choices">
+        <span>[1] ${ev.opt1}</span>
+        <span>[2] ${ev.opt2}</span>
+      </div>
+    `;
+  }
+
+  function startEvent() {
+    if (!eventEl || p3State.trial || p3State.event) return;
+
+    const ev = whisperEvents[Math.floor(Math.random() * whisperEvents.length)];
+
+    p3State.event = {
+      ev,
+      timeout: setTimeout(() => {
+        endEventWithoutChoice();
+      }, 9000)
+    };
+
+    eventEl.style.display = 'block';
+    renderEvent();
+  }
+
+  function endEventWithoutChoice() {
+    clearEvent();
+    p3State.lastEvent = performance.now();
+    notify('The whisper fades away.', 'bad');
+    updateStats();
+  }
+
+  function chooseEvent(choice) {
+    if (!p3State.event) return;
+
+    const ev = p3State.event.ev;
+
+    clearEvent();
+
+    p3State.whispers++;
+    p3State.lastEvent = performance.now();
+
+    const chance = choice === 0 ? ev.risk : ev.safe;
+    const gain = choice === 0 ? ev.big : ev.small;
+    const goodMsg = choice === 0 ? ev.msgBig : ev.msgSafe;
+
+    if (Math.random() < chance) {
+      p3State.score += gain;
+      notify(goodMsg, 'good');
+
+      if (choice === 0) {
+        blessScreen();
+      }
+    } else {
+      p3State.score += 15;
+      notify(ev.msgFail, 'bad');
+    }
+
+    updateStats();
+  }
+
+  function handleEventKey(code) {
+    if (!p3State.event) return;
+
+    if (code === 'Digit1' || code === 'Numpad1') {
+      chooseEvent(0);
+    }
+
+    if (code === 'Digit2' || code === 'Numpad2') {
+      chooseEvent(1);
+    }
+  }
+
+  function finishCinematic(tryAutoStart = true) {
+    if (finished) return;
+
+    finished = true;
+    cineDone = true;
+
+    cine.classList.add('hidden');
+    document.body.classList.remove('p3-cine');
+
+    overlay.classList.remove('hidden');
+    startBtn.textContent = 'Enter the World';
+
+    if (hintEl) {
+      hintEl.textContent = 'Q = Quest Log | 1/2 = Choices | Trials use F/R/G/V/B';
+    }
+
+    startBtn.focus();
+    updateStats();
+
+    if (tryAutoStart) {
+      startBtn.click();
+    }
+  }
+
+  skipBtn.addEventListener('click', () => {
+    finishCinematic(true);
+  });
+
+  enterBtn.addEventListener('click', () => {
+    finishCinematic(true);
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    p3State.locked = !!document.pointerLockElement;
+
+    if (p3State.locked) {
+      p3State.lastEvent = performance.now();
+      notify('The night listens. Press Q for Quest Log.', 'info');
+    } else {
+      clearTrial();
+      clearEvent();
+
+      if (questPanel) {
+        questPanel.classList.remove('show');
+      }
+
+      p3State.questOpen = false;
+    }
+
+    updateStats();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (!cineDone) return;
+
+    if (e.code === 'KeyQ') {
+      toggleQuest();
+      return;
+    }
+
+    if (!p3State.locked) return;
+
+    if (p3State.trial) {
+      handleTrialKey(e.code);
+      return;
+    }
+
+    if (p3State.event) {
+      handleEventKey(e.code);
+      return;
+    }
+  });
+
+  if (shardsEl) {
+    const shardObserver = new MutationObserver(() => {
+      const info = getShardInfo();
+
+      if (info.c > p3State.lastCount) {
+        const now = performance.now();
+
+        if (p3State.lastShardTime && now - p3State.lastShardTime < 25000) {
+          p3State.combo++;
+          const bonus = 40 + p3State.combo * 15;
+          p3State.score += bonus;
+          notify(`Quick shard! Combo x${p3State.combo} +${bonus}`, 'good');
+        } else {
+          p3State.combo = 1;
+          p3State.score += 50;
+          notify('Light shard collected. +50', 'good');
+        }
+
+        p3State.lastShardTime = now;
+
+        if ([2, 5, 8, 11].includes(info.c)) {
+          startTrial();
+        }
+
+        updateStats();
+      }
+
+      p3State.lastCount = info.c;
+    });
+
+    shardObserver.observe(shardsEl, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
+  if (messageEl) {
+    const messageObserver = new MutationObserver(() => {
+      const txt = messageEl.textContent || '';
+
+      if (/shadow|faded|darkness/i.test(txt)) {
+        document.body.classList.add('p3-danger');
+
+        setTimeout(() => {
+          document.body.classList.remove('p3-danger');
+        }, 1500);
+
+        p3State.score += 5;
+        updateStats();
+      }
+    });
+
+    messageObserver.observe(messageEl, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
+  setInterval(() => {
+    if (!cineDone || !p3State.locked) return;
+
+    p3State.surviveTime++;
+
+    if (p3State.surviveTime === 180) {
+      p3State.score += 150;
+      notify('Quest complete: Survived the night for 3 minutes. +150', 'good');
+    }
+
+    updateStats();
+  }, 1000);
+
+  setInterval(() => {
+    if (
+      cineDone &&
+      p3State.locked &&
+      !p3State.trial &&
+      !p3State.event &&
+      p3State.surviveTime > 15 &&
+      performance.now() - p3State.lastEvent > 38000
+    ) {
+      startEvent();
+    }
+  }, 8000);
+
+  updateStats();
+})();
+</script>
 </body>
 </html>
