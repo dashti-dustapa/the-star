@@ -1,1 +1,1181 @@
-print("hello world")
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Lost Star — 3D Game</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; overflow:hidden; background:#04050a; font-family:Arial, sans-serif; }
+    canvas { display:block; }
+
+    #overlay {
+      position:fixed; inset:0; z-index:20;
+      display:flex; align-items:center; justify-content:center;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(80,120,255,.18), transparent 30%),
+        radial-gradient(circle at 80% 30%, rgba(255,190,80,.12), transparent 25%),
+        linear-gradient(135deg, rgba(4,8,18,.94), rgba(8,10,25,.98));
+      transition:.45s;
+      color:#fff;
+      text-align:center;
+    }
+    #overlay.hidden { opacity:0; pointer-events:none; }
+    .panel { max-width:760px; padding:34px; }
+    .panel h1 {
+      font-size:64px; margin-bottom:14px;
+      color:#ffd98a; text-shadow:0 0 30px rgba(255,200,90,.35);
+    }
+    .panel p { color:#d8e2ff; font-size:20px; line-height:1.6; margin-bottom:18px; }
+    .panel small { display:block; color:#9fb0d8; margin-bottom:24px; }
+    #startBtn {
+      border:1px solid rgba(255,220,140,.5);
+      background:linear-gradient(180deg, rgba(255,215,120,.18), rgba(255,215,120,.08));
+      color:#ffe8b0; font-size:25px; font-weight:bold;
+      padding:14px 34px; border-radius:14px; cursor:pointer;
+      box-shadow:0 0 25px rgba(255,210,110,.18);
+      transition:.25s;
+    }
+    #startBtn:hover { transform:scale(1.05); box-shadow:0 0 40px rgba(255,210,110,.32); }
+
+    #hud { position:fixed; inset:0; z-index:10; pointer-events:none; opacity:0; transition:.4s; }
+    #hud.visible { opacity:1; }
+    #topLeft { position:absolute; top:18px; left:18px; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.8); }
+    #objective { font-size:20px; font-weight:bold; color:#dfeaff; margin-bottom:8px; }
+    #shards { font-size:18px; color:#9df2ff; margin-bottom:10px; }
+    #lightBarOuter {
+      width:250px; height:16px; border-radius:999px; overflow:hidden;
+      border:2px solid rgba(255,255,255,.28);
+      background:rgba(0,0,0,.35);
+      box-shadow:0 0 18px rgba(120,220,255,.14);
+    }
+    #lightBarInner { width:100%; height:100%; background:linear-gradient(90deg,#8df7ff,#fff); }
+    #message {
+      position:absolute; bottom:100px; width:100%; text-align:center;
+      font-size:28px; color:#fff; font-weight:bold;
+      text-shadow:0 0 18px rgba(140,220,255,.4), 0 2px 10px rgba(0,0,0,.9);
+      opacity:0; transition:.4s;
+    }
+    #hint {
+      position:absolute; bottom:18px; width:100%; text-align:center;
+      color:rgba(255,255,255,.72); font-size:15px; text-shadow:0 2px 8px rgba(0,0,0,.8);
+    }
+    #crosshair {
+      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:8px; height:8px; border-radius:50%; z-index:15;
+      background:rgba(255,255,255,.88);
+      box-shadow:0 0 14px rgba(255,255,255,.8);
+      opacity:0; transition:.3s;
+    }
+    #crosshair.visible { opacity:.95; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div class="panel">
+      <h1>The Lost Star</h1>
+      <p>
+        The star has fallen into darkness, and the world is losing its memories.
+        Collect the 12 Light Shards, avoid the Shadow of Memory, and return to the Star Shrine.
+      </p>
+      <small>WASD / Arrow keys = move | Mouse = look | Shift = sprint | Esc = pause</small>
+      <button id="startBtn">Start Adventure</button>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="topLeft">
+      <div id="objective">Collect the Light Shards</div>
+      <div id="shards">0 / 12</div>
+      <div id="lightBarOuter"><div id="lightBarInner"></div></div>
+    </div>
+    <div id="message"></div>
+    <div id="hint">Find the glowing shards in the dark forest.</div>
+  </div>
+
+  <div id="crosshair"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const hud = document.getElementById('hud');
+    const crosshair = document.getElementById('crosshair');
+    const objectiveEl = document.getElementById('objective');
+    const shardsEl = document.getElementById('shards');
+    const lightBarInner = document.getElementById('lightBarInner');
+    const messageEl = document.getElementById('message');
+
+    let scene, camera, renderer, controls, composer, bloomPass, clock;
+    let hemiLight, moonLight;
+    let starGroup, starMaterial, starLight, starHalo, starDust;
+    let shadowEnemy, shadowMat, fireflies;
+    let glowTexture;
+
+    const colliders = [];
+    const shards = [];
+
+    let collected = 0;
+    const totalShards = 12;
+    let allCollected = false;
+    let won = false;
+    let light = 100;
+    let messageTimeout = null;
+    let audioCtx = null;
+
+    const keys = { f:false, b:false, l:false, r:false, sprint:false };
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+
+    init();
+    animate();
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x070b19);
+      scene.fog = new THREE.FogExp2(0x070b19, 0.016);
+
+      camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 1000);
+      camera.position.set(0, 3, 24);
+
+      renderer = new THREE.WebGLRenderer({ antialias:true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      document.body.appendChild(renderer.domElement);
+
+      clock = new THREE.Clock();
+      controls = new PointerLockControls(camera, renderer.domElement);
+
+      glowTexture = makeGlowTexture();
+
+      const grassTexture = makeTexture(1024, 20, paintGrass);
+      const barkTexture = makeTexture(256, 2, paintBark);
+      const leavesTexture = makeTexture(256, 2, paintLeaves);
+      const rockTexture = makeTexture(512, 3, paintRock);
+      const stoneTexture = makeTexture(512, 3, paintStone);
+
+      createLights();
+      createSky();
+      createTerrain(grassTexture);
+      createShrine(stoneTexture);
+      createForest(barkTexture, leavesTexture);
+      createRocks(rockTexture);
+      createGroundLights();
+      createShards();
+      createShadowEnemy();
+      createParticles();
+      setupPost();
+      setupEvents();
+      updateHUD();
+    }
+
+    function fract(x) { return x - Math.floor(x); }
+
+    function rand2(x, z) {
+      return fract(Math.sin(x * 127.1 + z * 311.7) * 43758.5453123);
+    }
+
+    function noise2(x, z) {
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const xf = x - xi, zf = z - zi;
+      const a = rand2(xi, zi);
+      const b = rand2(xi + 1, zi);
+      const c = rand2(xi, zi + 1);
+      const d = rand2(xi + 1, zi + 1);
+      const u = xf * xf * (3 - 2 * xf);
+      const v = zf * zf * (3 - 2 * zf);
+      return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
+    }
+
+    function getHeight(x, z) {
+      const n =
+        noise2(x * 0.016, z * 0.016) * 9.0 +
+        noise2(x * 0.06, z * 0.06) * 2.5 +
+        noise2(x * 0.2, z * 0.2) * 0.7;
+      const d = Math.hypot(x, z);
+      const flatten = THREE.MathUtils.smoothstep(d, 10, 50);
+      return (n - 5.5) * flatten;
+    }
+
+    function makeTexture(size, repeat, painter) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const g = canvas.getContext('2d');
+      painter(g, size);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeat, repeat);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 8;
+      return texture;
+    }
+
+    function makeGlowTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 128;
+      const g = canvas.getContext('2d');
+      const gradient = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.22, 'rgba(255,255,255,.85)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gradient;
+      g.fillRect(0, 0, 128, 128);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    function paintGrass(g, s) {
+      g.fillStyle = '#14331b';
+      g.fillRect(0, 0, s, s);
+
+      for (let i = 0; i < 12000; i++) {
+        const x = Math.random() * s;
+        const y = Math.random() * s;
+        const h = 3 + Math.random() * 9;
+        const r = 10 + Math.random() * 28;
+        const gr = 42 + Math.random() * 55;
+        const b = 18 + Math.random() * 30;
+        g.strokeStyle = `rgba(${r},${gr},${b},${0.22 + Math.random() * 0.45})`;
+        g.lineWidth = 1 + Math.random() * 1.5;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + (Math.random() - 0.5) * 3, y - h);
+        g.stroke();
+      }
+
+      for (let i = 0; i < 55; i++) {
+        const x = Math.random() * s;
+        const y = Math.random() * s;
+        const r = 25 + Math.random() * 80;
+        const gradient = g.createRadialGradient(x, y, 0, x, y, r);
+        gradient.addColorStop(0, 'rgba(0,0,0,.16)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gradient;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+
+      for (let i = 0; i < 100; i++) {
+        if (Math.random() < 0.14) {
+          g.fillStyle = 'rgba(190,235,160,.16)';
+          g.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+        }
+      }
+    }
+
+    function paintBark(g, s) {
+      g.fillStyle = '#332417';
+      g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 150; i++) {
+        const x = Math.random() * s;
+        g.strokeStyle = `rgba(${35 + Math.random() * 40},${22 + Math.random() * 25},${12 + Math.random() * 18},${0.25 + Math.random() * 0.45})`;
+        g.lineWidth = 2 + Math.random() * 6;
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.bezierCurveTo(
+          x + Math.random() * 20 - 10, s * 0.33,
+          x + Math.random() * 20 - 10, s * 0.66,
+          x + Math.random() * 30 - 15, s
+        );
+        g.stroke();
+      }
+    }
+
+    function paintLeaves(g, s) {
+      g.fillStyle = '#12381f';
+      g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 3500; i++) {
+        const x = Math.random() * s;
+        const y = Math.random() * s;
+        g.fillStyle = `rgba(${18 + Math.random() * 25},${65 + Math.random() * 70},${28 + Math.random() * 35},${0.18 + Math.random() * 0.4})`;
+        g.fillRect(x, y, 2 + Math.random() * 3, 3 + Math.random() * 4);
+      }
+    }
+
+    function paintRock(g, s) {
+      g.fillStyle = '#5a616c';
+      g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 6500; i++) {
+        const x = Math.random() * s;
+        const y = Math.random() * s;
+        const v = 35 + Math.random() * 120;
+        g.fillStyle = `rgba(${v},${v + Math.random() * 15},${v + Math.random() * 25},${0.12 + Math.random() * 0.26})`;
+        g.fillRect(x, y, 1 + Math.random() * 4, 1 + Math.random() * 4);
+      }
+    }
+
+    function paintStone(g, s) {
+      g.fillStyle = '#555d6c';
+      g.fillRect(0, 0, s, s);
+      g.strokeStyle = 'rgba(25,30,40,.45)';
+      g.lineWidth = 5;
+      const rows = 7;
+      const h = s / rows;
+      for (let r = 0; r < rows; r++) {
+        const y = r * h;
+        g.strokeRect(0, y, s, h);
+        const cols = 4 + Math.floor(Math.random() * 3);
+        for (let c = 0; c < cols; c++) {
+          const x = (s / cols) * c + Math.random() * 18;
+          g.strokeRect(x, y + Math.random() * 8, s / cols, h);
+        }
+      }
+      for (let i = 0; i < 2000; i++) {
+        const v = 70 + Math.random() * 85;
+        g.fillStyle = `rgba(${v},${v + 5},${v + 18},.08)`;
+        g.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+      }
+    }
+
+    function createLights() {
+      hemiLight = new THREE.HemisphereLight(0x4f6dff, 0x0d1018, 0.75);
+      scene.add(hemiLight);
+
+      moonLight = new THREE.DirectionalLight(0x9fc4ff, 1.7);
+      moonLight.position.set(70, 95, -45);
+      moonLight.castShadow = true;
+      moonLight.shadow.mapSize.set(2048, 2048);
+      moonLight.shadow.camera.near = 1;
+      moonLight.shadow.camera.far = 300;
+      moonLight.shadow.camera.left = -140;
+      moonLight.shadow.camera.right = 140;
+      moonLight.shadow.camera.top = 140;
+      moonLight.shadow.camera.bottom = -140;
+      moonLight.shadow.bias = -0.0002;
+      scene.add(moonLight);
+
+      scene.add(new THREE.AmbientLight(0x223055, 0.35));
+    }
+
+    function createSky() {
+      const count = 2500;
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        const r = 380 + Math.random() * 230;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(THREE.MathUtils.randFloat(-0.2, 1));
+        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.cos(phi);
+        positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 0xcfe6ff,
+        size: 1.7,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      scene.add(new THREE.Points(geo, mat));
+
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(12, 32, 32),
+        new THREE.MeshBasicMaterial({ color: 0xdfeaff, fog: false })
+      );
+      moon.position.set(150, 120, -180);
+      scene.add(moon);
+    }
+
+    function createTerrain(grassTexture) {
+      const geometry = new THREE.PlaneGeometry(340, 340, 220, 220);
+      geometry.rotateX(-Math.PI / 2);
+      const pos = geometry.attributes.position;
+
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        pos.setY(i, getHeight(x, z));
+      }
+
+      geometry.computeVertexNormals();
+
+      const material = new THREE.MeshStandardMaterial({
+        map: grassTexture,
+        bumpMap: grassTexture,
+        bumpScale: 0.35,
+        roughness: 1,
+        metalness: 0
+      });
+
+      const terrain = new THREE.Mesh(geometry, material);
+      terrain.receiveShadow = true;
+      scene.add(terrain);
+    }
+
+    function createStarGeometry() {
+      const shape = new THREE.Shape();
+      const spikes = 5;
+      const outer = 2.3;
+      const inner = 0.95;
+
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i === 0) shape.moveTo(x, y);
+        else shape.lineTo(x, y);
+      }
+
+      shape.closePath();
+
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.55,
+        bevelEnabled: true,
+        bevelThickness: 0.14,
+        bevelSize: 0.14,
+        bevelSegments: 2,
+        steps: 1
+      });
+      geometry.center();
+      return geometry;
+    }
+
+    function createShrine(stoneTexture) {
+      const y = getHeight(0, 0);
+      const stoneMat = new THREE.MeshStandardMaterial({
+        map: stoneTexture,
+        bumpMap: stoneTexture,
+        bumpScale: 0.35,
+        roughness: 0.95
+      });
+
+      const platform = new THREE.Mesh(new THREE.CylinderGeometry(9.2, 10.6, 1.4, 48), stoneMat);
+      platform.position.set(0, y + 0.7, 0);
+      platform.castShadow = true;
+      platform.receiveShadow = true;
+      scene.add(platform);
+
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const x = Math.cos(a) * 7.7;
+        const z = Math.sin(a) * 7.7;
+
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.58, 4.8, 10), stoneMat);
+        pillar.position.set(x, y + 3.2, z);
+        pillar.castShadow = true;
+        pillar.receiveShadow = true;
+        scene.add(pillar);
+
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.55, 1.35), stoneMat);
+        cap.position.set(x, y + 5.8, z);
+        cap.castShadow = true;
+        cap.receiveShadow = true;
+        scene.add(cap);
+
+        colliders.push({ x, z, r: 1.0 });
+      }
+
+      starMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffe8a8,
+        emissive: 0xffc74d,
+        emissiveIntensity: 1.2,
+        metalness: 0.25,
+        roughness: 0.35
+      });
+
+      const starMesh = new THREE.Mesh(createStarGeometry(), starMaterial);
+      starMesh.castShadow = true;
+
+      starHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xffd98a,
+        transparent: true,
+        opacity: 0.32,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      }));
+      starHalo.scale.set(18, 18, 1);
+
+      starLight = new THREE.PointLight(0xffcf6e, 24, 130, 1.6);
+
+      starGroup = new THREE.Group();
+      starGroup.add(starMesh, starHalo, starLight);
+      starGroup.position.set(0, y + 8.7, 0);
+      scene.add(starGroup);
+    }
+
+    function createForest(barkTexture, leavesTexture) {
+      const trunkMat = new THREE.MeshStandardMaterial({
+        map: barkTexture,
+        bumpMap: barkTexture,
+        bumpScale: 0.25,
+        roughness: 1
+      });
+
+      const leafMat = new THREE.MeshStandardMaterial({
+        map: leavesTexture,
+        bumpMap: leavesTexture,
+        bumpScale: 0.18,
+        roughness: 1
+      });
+
+      for (let i = 0; i < 100; i++) {
+        const x = THREE.MathUtils.randFloatSpread(300);
+        const z = THREE.MathUtils.randFloatSpread(300);
+        const d = Math.hypot(x, z);
+
+        if (d < 22 || d > 158) continue;
+
+        const y = getHeight(x, z);
+        const scale = 0.8 + Math.random() * 1.25;
+        const trunkH = 3.6 * scale;
+
+        const tree = new THREE.Group();
+
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.34 * scale, 0.58 * scale, trunkH, 7),
+          trunkMat
+        );
+        trunk.position.y = trunkH / 2;
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+        tree.add(trunk);
+
+        for (let j = 0; j < 3; j++) {
+          const cone = new THREE.Mesh(
+            new THREE.ConeGeometry((2.4 - j * 0.55) * scale, (3.5 - j * 0.55) * scale, 8),
+            leafMat
+          );
+          cone.position.y = trunkH * 0.75 + j * 1.65 * scale;
+          cone.castShadow = true;
+          cone.receiveShadow = true;
+          tree.add(cone);
+        }
+
+        tree.position.set(x, y, z);
+        tree.rotation.y = Math.random() * Math.PI * 2;
+        scene.add(tree);
+
+        colliders.push({ x, z, r: 1.35 * scale });
+      }
+    }
+
+    function createRocks(rockTexture) {
+      const rockMat = new THREE.MeshStandardMaterial({
+        map: rockTexture,
+        bumpMap: rockTexture,
+        bumpScale: 0.5,
+        roughness: 1
+      });
+
+      for (let i = 0; i < 42; i++) {
+        const x = THREE.MathUtils.randFloatSpread(305);
+        const z = THREE.MathUtils.randFloatSpread(305);
+        const d = Math.hypot(x, z);
+
+        if (d < 16 || d > 156) continue;
+
+        const r = 0.5 + Math.random() * 1.8;
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), rockMat);
+        rock.position.set(x, getHeight(x, z) + r * 0.35, z);
+        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rock.scale.y = 0.6 + Math.random() * 0.8;
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        scene.add(rock);
+
+        colliders.push({ x, z, r: r * 0.85 });
+      }
+    }
+
+    function createGroundLights() {
+      const count = 350;
+      const geometry = new THREE.SphereGeometry(0.06, 6, 6);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x89ffef,
+        emissive: 0x54ffd0,
+        emissiveIntensity: 1.8,
+        roughness: 0.4
+      });
+
+      const inst = new THREE.InstancedMesh(geometry, material, count);
+      const dummy = new THREE.Object3D();
+
+      for (let i = 0; i < count; i++) {
+        const x = THREE.MathUtils.randFloatSpread(300);
+        const z = THREE.MathUtils.randFloatSpread(300);
+        const y = getHeight(x, z) + 0.12;
+
+        dummy.position.set(x, y, z);
+        dummy.scale.setScalar(0.6 + Math.random() * 1.8);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+      }
+
+      inst.instanceMatrix.needsUpdate = true;
+      scene.add(inst);
+    }
+
+    function findSpawn(minRadius, maxRadius, clearance = 3) {
+      for (let tries = 0; tries < 30; tries++) {
+        const a = Math.random() * Math.PI * 2;
+        const rad = minRadius + Math.random() * (maxRadius - minRadius);
+        const x = Math.cos(a) * rad;
+        const z = Math.sin(a) * rad;
+
+        if (Math.hypot(x, z) < 20) continue;
+
+        const clear = colliders.every(c => Math.hypot(c.x - x, c.z - z) > c.r + clearance);
+        if (clear) return { x, z };
+      }
+
+      const a = Math.random() * Math.PI * 2;
+      return { x: Math.cos(a) * minRadius, z: Math.sin(a) * minRadius };
+    }
+
+    function createShards() {
+      const shardGeo = new THREE.OctahedronGeometry(0.52, 0);
+      const shardMat = new THREE.MeshStandardMaterial({
+        color: 0xeaffff,
+        emissive: 0x66efff,
+        emissiveIntensity: 4.5,
+        roughness: 0.08,
+        metalness: 0.1
+      });
+
+      for (let i = 0; i < totalShards; i++) {
+        const p = findSpawn(27, 120, 3.5);
+        const y = getHeight(p.x, p.z) + 1.8;
+
+        const shard = new THREE.Mesh(shardGeo, shardMat);
+        shard.position.set(p.x, y, p.z);
+        shard.castShadow = true;
+
+        const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glowTexture,
+          color: 0x89f7ff,
+          transparent: true,
+          opacity: 0.55,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        }));
+        halo.scale.set(4.2, 4.2, 1);
+        shard.add(halo);
+
+        shard.userData = {
+          baseY: y,
+          phase: Math.random() * Math.PI * 2
+        };
+
+        scene.add(shard);
+        shards.push(shard);
+      }
+    }
+
+    function createShadowEnemy() {
+      shadowEnemy = new THREE.Group();
+
+      shadowMat = new THREE.MeshStandardMaterial({
+        color: 0x050308,
+        emissive: 0x2a0d55,
+        emissiveIntensity: 1.2,
+        roughness: 0.2,
+        metalness: 0.15,
+        transparent: true,
+        opacity: 0.92
+      });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 24), shadowMat);
+      body.castShadow = true;
+      shadowEnemy.add(body);
+
+      const cloak = new THREE.Mesh(
+        new THREE.ConeGeometry(2.1, 4.6, 16, 1, true),
+        new THREE.MeshStandardMaterial({
+          color: 0x0b0410,
+          emissive: 0x220845,
+          transparent: true,
+          opacity: 0.72,
+          side: THREE.DoubleSide
+        })
+      );
+      cloak.position.y = -0.6;
+      shadowEnemy.add(cloak);
+
+      const eyeMat = new THREE.MeshStandardMaterial({
+        color: 0xff2244,
+        emissive: 0xff2244,
+        emissiveIntensity: 8
+      });
+
+      const eyeGeo = new THREE.SphereGeometry(0.12, 12, 12);
+
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.36, 0.35, 1.25);
+      shadowEnemy.add(eyeL);
+
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeR.position.set(0.36, 0.35, 1.25);
+      shadowEnemy.add(eyeR);
+
+      const aura = new THREE.PointLight(0x9033ff, 5, 35, 2);
+      shadowEnemy.add(aura);
+
+      shadowEnemy.position.set(-55, getHeight(-55, 60) + 2.5, 60);
+      scene.add(shadowEnemy);
+    }
+
+    function createParticles() {
+      const count = 220;
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        const x = THREE.MathUtils.randFloatSpread(300);
+        const z = THREE.MathUtils.randFloatSpread(300);
+        const y = getHeight(x, z) + 0.5 + Math.random() * 2.5;
+
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xa8ffde,
+        size: 0.65,
+        map: glowTexture,
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+
+      fireflies = new THREE.Points(geo, mat);
+      scene.add(fireflies);
+
+      const sCount = 130;
+      const sPos = new Float32Array(sCount * 3);
+
+      for (let i = 0; i < sCount; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 2 + Math.random() * 5;
+        sPos[i * 3] = Math.cos(a) * r;
+        sPos[i * 3 + 1] = Math.random() * 8 - 4;
+        sPos[i * 3 + 2] = Math.sin(a) * r;
+      }
+
+      const sGeo = new THREE.BufferGeometry();
+      sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
+
+      starDust = new THREE.Points(sGeo, new THREE.PointsMaterial({
+        color: 0xffdf9f,
+        size: 0.45,
+        map: glowTexture,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }));
+
+      starDust.position.set(0, getHeight(0, 0) + 8.5, 0);
+      scene.add(starDust);
+    }
+
+    function setupPost() {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(innerWidth, innerHeight),
+        0.95,
+        0.42,
+        0.72
+      );
+
+      composer.addPass(bloomPass);
+      composer.addPass(new OutputPass());
+    }
+
+    function setupEvents() {
+      window.addEventListener('resize', onResize);
+
+      document.addEventListener('keydown', (e) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+          e.preventDefault();
+        }
+        setKey(e.code, true);
+      });
+
+      document.addEventListener('keyup', (e) => {
+        setKey(e.code, false);
+      });
+
+      startBtn.addEventListener('click', () => {
+        if (won) {
+          location.reload();
+          return;
+        }
+        initAudio();
+        controls.lock();
+      });
+
+      controls.addEventListener('lock', () => {
+        overlay.classList.add('hidden');
+        hud.classList.add('visible');
+        crosshair.classList.add('visible');
+
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (!allCollected) {
+          showMessage('Find the 12 Light Shards.', 4500);
+        }
+      });
+
+      controls.addEventListener('unlock', () => {
+        overlay.classList.remove('hidden');
+        hud.classList.remove('visible');
+        crosshair.classList.remove('visible');
+
+        if (!won) {
+          startBtn.textContent = 'Resume';
+        } else {
+          document.querySelector('#overlay h1').textContent = 'You Restored the Lost Star!';
+          startBtn.textContent = 'Play Again';
+        }
+      });
+    }
+
+    function setKey(code, down) {
+      switch (code) {
+        case 'KeyW':
+        case 'ArrowUp':
+          keys.f = down;
+          break;
+        case 'KeyS':
+        case 'ArrowDown':
+          keys.b = down;
+          break;
+        case 'KeyA':
+        case 'ArrowLeft':
+          keys.l = down;
+          break;
+        case 'KeyD':
+        case 'ArrowRight':
+          keys.r = down;
+          break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+          keys.sprint = down;
+          break;
+      }
+    }
+
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      composer.setSize(innerWidth, innerHeight);
+    }
+
+    function initAudio() {
+      if (!audioCtx) {
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {}
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function tone(freq, dur = 0.6, type = 'sine', vol = 0.12, when = 0) {
+      if (!audioCtx) return;
+
+      const t = audioCtx.currentTime + when;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(vol, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.00001, t + dur);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(t);
+      osc.stop(t + dur + 0.05);
+    }
+
+    function playChime(n) {
+      tone(620 + n * 45, 0.65, 'sine', 0.12);
+      tone(930 + n * 45, 0.9, 'triangle', 0.05, 0.08);
+    }
+
+    function playDark() {
+      tone(110, 0.8, 'sawtooth', 0.06);
+      tone(70, 0.9, 'sine', 0.09, 0.05);
+    }
+
+    function updateHUD() {
+      shardsEl.textContent = `${collected} / ${totalShards}`;
+
+      if (!allCollected) {
+        objectiveEl.textContent = 'Collect the Light Shards in the dark forest.';
+      } else if (!won) {
+        objectiveEl.textContent = 'Return to the Star Shrine at the center.';
+      } else {
+        objectiveEl.textContent = 'The Lost Star is restored.';
+      }
+
+      const v = Math.max(0, Math.min(100, light));
+      lightBarInner.style.width = v + '%';
+
+      if (v > 60) {
+        lightBarInner.style.background = 'linear-gradient(90deg,#82f7ff,#ffffff)';
+      } else if (v > 30) {
+        lightBarInner.style.background = 'linear-gradient(90deg,#ffd45f,#fff2cf)';
+      } else {
+        lightBarInner.style.background = 'linear-gradient(90deg,#ff4466,#ffd0d8)';
+      }
+    }
+
+    function showMessage(text, duration = 4200) {
+      messageEl.textContent = text;
+      messageEl.style.opacity = 1;
+      clearTimeout(messageTimeout);
+      messageTimeout = setTimeout(() => {
+        messageEl.style.opacity = 0;
+      }, duration);
+    }
+
+    function updatePlayer(dt) {
+      if (!controls.isLocked) return;
+
+      velocity.x -= velocity.x * 9.0 * dt;
+      velocity.z -= velocity.z * 9.0 * dt;
+
+      direction.z = Number(keys.f) - Number(keys.b);
+      direction.x = Number(keys.r) - Number(keys.l);
+      direction.normalize();
+
+      const accel = keys.sprint ? 95 : 55;
+
+      if (keys.f || keys.b) velocity.z -= direction.z * accel * dt;
+      if (keys.l || keys.r) velocity.x -= direction.x * accel * dt;
+
+      controls.moveRight(-velocity.x * dt);
+      controls.moveForward(-velocity.z * dt);
+
+      const p = camera.position;
+      const h = Math.hypot(p.x, p.z);
+
+      if (h > 152) {
+        p.x *= 152 / h;
+        p.z *= 152 / h;
+        velocity.multiplyScalar(0.35);
+      }
+
+      for (const c of colliders) {
+        const dx = p.x - c.x;
+        const dz = p.z - c.z;
+        const dist = Math.hypot(dx, dz);
+        const min = c.r + 0.9;
+
+        if (dist < min && dist > 0.001) {
+          const m = (min - dist) / dist;
+          p.x += dx * m;
+          p.z += dz * m;
+        }
+      }
+
+      const groundY = getHeight(p.x, p.z) + 2.35;
+      p.y += (groundY - p.y) * Math.min(1, 12 * dt);
+
+      if (allCollected && !won && Math.hypot(p.x, p.z) < 9.0) {
+        winGame();
+      }
+    }
+
+    function updateShards(dt) {
+      for (let i = shards.length - 1; i >= 0; i--) {
+        const s = shards[i];
+
+        s.rotation.y += dt * 2.2;
+        s.rotation.x += dt * 0.7;
+        s.position.y = s.userData.baseY + Math.sin(clock.elapsedTime * 2 + s.userData.phase) * 0.4;
+
+        if (camera.position.distanceTo(s.position) < 2.6) {
+          scene.remove(s);
+          shards.splice(i, 1);
+
+          collected++;
+          light = Math.min(100, light + 25);
+
+          playChime(collected);
+          showMessage(`Light shard found: ${collected}/${totalShards}`, 2600);
+
+          if (collected === totalShards) {
+            allCollected = true;
+            showMessage('All shards found! Return to the Star Shrine!', 6500);
+          }
+
+          updateHUD();
+        }
+      }
+    }
+
+    function updateStar() {
+      starGroup.rotation.y = clock.elapsedTime * 0.5;
+      starGroup.position.y = getHeight(0, 0) + 8.7 + Math.sin(clock.elapsedTime * 1.2) * 0.45;
+
+      starDust.rotation.y = -clock.elapsedTime * 0.7;
+
+      starHalo.material.opacity = won ? 0.85 : allCollected ? 0.5 : 0.3;
+
+      const targetEmissive = won ? 6.8 : allCollected ? 2.7 : 1.2;
+      starMaterial.emissiveIntensity +=
+        (targetEmissive - starMaterial.emissiveIntensity) * Math.min(1, clock.getDelta() === undefined ? 0.016 : 0.016);
+
+      const targetLight = won ? 220 : allCollected ? 55 : 24;
+      starLight.intensity += (targetLight - starLight.intensity) * 0.04;
+    }
+
+    function updateShadowEnemy(dt) {
+      if (!shadowEnemy) return;
+
+      if (won) {
+        shadowEnemy.visible = false;
+        return;
+      }
+
+      const sp = shadowEnemy.position;
+      const dx = camera.position.x - sp.x;
+      const dz = camera.position.z - sp.z;
+      const dist = Math.hypot(dx, dz);
+
+      const speed = 2.4 + collected * 0.15;
+
+      if (dist < 48 && dist > 0.1) {
+        sp.x += (dx / dist) * speed * dt;
+        sp.z += (dz / dist) * speed * dt;
+      } else {
+        sp.x += Math.cos(clock.elapsedTime * 0.35) * 1.3 * dt;
+        sp.z += Math.sin(clock.elapsedTime * 0.29) * 1.3 * dt;
+      }
+
+      const h = Math.hypot(sp.x, sp.z);
+      if (h > 145) {
+        sp.x *= 145 / h;
+        sp.z *= 145 / h;
+      }
+
+      sp.y = getHeight(sp.x, sp.z) + 2.4 + Math.sin(clock.elapsedTime * 1.7) * 0.3;
+      shadowEnemy.lookAt(camera.position.x, sp.y, camera.position.z);
+
+      shadowMat.emissiveIntensity = dist < 14 ? 3.4 : 1.3;
+
+      if (dist < 2.25 && controls.isLocked) {
+        light -= 20;
+        playDark();
+        showMessage('The Shadow of Memory found you!', 2200);
+
+        const push = new THREE.Vector3()
+          .subVectors(camera.position, sp)
+          .setY(0)
+          .normalize()
+          .multiplyScalar(4.2);
+
+        camera.position.add(push);
+        velocity.add(push.multiplyScalar(6));
+      }
+    }
+
+    function updateLight(dt) {
+      if (!controls.isLocked || won) return;
+
+      light -= dt * 1.25;
+
+      if (shadowEnemy && shadowEnemy.visible) {
+        const dist = camera.position.distanceTo(shadowEnemy.position);
+        if (dist < 15) light -= dt * 15;
+      }
+
+      light = Math.max(0, Math.min(100, light));
+      updateHUD();
+
+      if (light <= 0) {
+        camera.position.set(0, getHeight(0, 0) + 3.2, 18);
+        velocity.set(0, 0, 0);
+        light = 55;
+        playDark();
+        showMessage('Your light faded... you wake at the shrine.', 5000);
+        updateHUD();
+      }
+    }
+
+    function winGame() {
+      if (won) return;
+
+      won = true;
+
+      starMaterial.emissiveIntensity = 7;
+      starLight.intensity = 260;
+      bloomPass.strength = 1.2;
+      scene.fog.density = 0.008;
+      hemiLight.intensity = 1.35;
+      moonLight.intensity = 2.4;
+      scene.background.set(0x15295c);
+
+      if (shadowEnemy) shadowEnemy.visible = false;
+
+      showMessage('You restored the Lost Star! Light returns to the world.', 9000);
+
+      tone(660, 0.9, 'sine', 0.12);
+      tone(880, 0.9, 'sine', 0.12, 0.12);
+      tone(1100, 1.4, 'sine', 0.14, 0.24);
+
+      updateHUD();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      updatePlayer(dt);
+      updateShards(dt);
+      updateStar();
+      updateShadowEnemy(dt);
+      updateLight(dt);
+
+      if (fireflies) {
+        fireflies.rotation.y += dt * 0.012;
+        fireflies.material.opacity = 0.55 + Math.sin(clock.elapsedTime * 2.3) * 0.18;
+      }
+
+      composer.render();
+    }
+  </script>
+</body>
+</html>
