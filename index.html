@@ -1177,5 +1177,617 @@
       composer.render();
     }
   </script>
+<!-- PART 2: Cinematic story intro + extra polish -->
+<style>
+  body.p2-story #overlay {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  #p2-story-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(85,120,255,.18), transparent 32%),
+      radial-gradient(circle at 80% 30%, rgba(255,190,80,.14), transparent 28%),
+      linear-gradient(135deg, rgba(2,5,12,.98), rgba(5,8,22,.99));
+    opacity: 1;
+    transition: opacity .8s ease;
+    color: #fff;
+  }
+
+  #p2-story-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #p2-story-stars {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+
+  #p2-story-box {
+    position: relative;
+    z-index: 2;
+    max-width: 900px;
+    width: min(92vw, 900px);
+    padding: 42px;
+    text-align: center;
+    background: rgba(0,0,0,.28);
+    border: 1px solid rgba(255,220,140,.16);
+    border-radius: 24px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+      0 0 60px rgba(0,0,0,.45),
+      0 0 45px rgba(120,180,255,.08);
+  }
+
+  #p2-story-kicker {
+    color: #9fd8ff;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-size: 13px;
+    margin-bottom: 14px;
+    opacity: .9;
+  }
+
+  #p2-story-title {
+    font-size: 46px;
+    margin-bottom: 18px;
+    color: #ffd98a;
+    text-shadow: 0 0 30px rgba(255,205,100,.25);
+  }
+
+  #p2-story-text {
+    font-size: 22px;
+    line-height: 1.65;
+    color: #e9efff;
+    min-height: 92px;
+  }
+
+  #p2-story-ku {
+    direction: rtl;
+    font-size: 21px;
+    line-height: 1.75;
+    color: #ffe3a4;
+    margin-top: 18px;
+    min-height: 70px;
+    text-shadow: 0 0 18px rgba(255,215,120,.12);
+  }
+
+  .p2-buttons {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 28px;
+  }
+
+  .p2-buttons button {
+    border: 1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: .22s ease;
+  }
+
+  .p2-buttons button:hover {
+    transform: translateY(-2px) scale(1.03);
+    background: rgba(255,255,255,.12);
+    box-shadow: 0 0 22px rgba(160,220,255,.15);
+  }
+
+  .p2-buttons button:disabled {
+    opacity: .35;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+  }
+
+  #p2-begin {
+    border-color: rgba(255,215,120,.55);
+    background: rgba(255,215,120,.12);
+    color: #ffe7ad;
+    font-weight: bold;
+  }
+
+  #p2-skip {
+    opacity: .75;
+  }
+
+  #p2-dots {
+    margin-top: 22px;
+  }
+
+  #p2-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 4px;
+    background: rgba(255,255,255,.22);
+  }
+
+  #p2-dots span.active {
+    background: #ffd98a;
+    box-shadow: 0 0 12px rgba(255,215,120,.8);
+  }
+
+  .p2-curtain {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 7vh;
+    background: #000;
+    z-index: 57;
+    transform: scaleY(0);
+    transition: transform .75s ease;
+    pointer-events: none;
+  }
+
+  #p2-curtain-top {
+    top: 0;
+    transform-origin: top;
+  }
+
+  #p2-curtain-bottom {
+    bottom: 0;
+    transform-origin: bottom;
+  }
+
+  body.p2-story .p2-curtain {
+    transform: scaleY(1);
+  }
+
+  #p2-vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 22;
+    opacity: .34;
+    background:
+      radial-gradient(circle at center, transparent 52%, rgba(0,0,10,.55) 100%);
+    transition: opacity .55s ease;
+  }
+
+  body.p2-low #p2-vignette {
+    opacity: .85;
+    animation: p2Danger 1s infinite;
+  }
+
+  @keyframes p2Danger {
+    50% { opacity: .45; }
+  }
+
+  #p2-grain {
+    position: fixed;
+    inset: -20%;
+    pointer-events: none;
+    z-index: 23;
+    opacity: .07;
+    background-image:
+      radial-gradient(rgba(255,255,255,.16) .5px, transparent .5px),
+      radial-gradient(rgba(255,255,255,.08) .5px, transparent .5px);
+    background-size: 3px 3px, 5px 5px;
+    animation: p2Grain .4s steps(4) infinite;
+  }
+
+  @keyframes p2Grain {
+    0% { transform: translate(0,0); }
+    25% { transform: translate(-4px,3px); }
+    50% { transform: translate(3px,-4px); }
+    75% { transform: translate(-3px,-3px); }
+    100% { transform: translate(0,0); }
+  }
+
+  #p2-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 35;
+    opacity: 0;
+    transition: opacity .35s ease;
+  }
+
+  #p2-flash.active {
+    opacity: 1;
+  }
+
+  #p2-chapter {
+    position: fixed;
+    top: 16%;
+    width: 100%;
+    text-align: center;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: .8s ease;
+    color: #fff;
+    font-size: 42px;
+    font-weight: bold;
+    text-shadow:
+      0 0 25px rgba(140,220,255,.35),
+      0 3px 18px rgba(0,0,0,.9);
+  }
+
+  #p2-chapter.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #p2-lore {
+    position: fixed;
+    bottom: 170px;
+    width: 100%;
+    text-align: center;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(16px);
+    transition: .7s ease;
+    color: #ffe9b8;
+    font-size: 24px;
+    text-shadow:
+      0 2px 14px rgba(0,0,0,.9),
+      0 0 22px rgba(255,220,130,.18);
+  }
+
+  #p2-lore.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  body.p2-playing canvas {
+    filter: saturate(1.12) contrast(1.05) brightness(1.01);
+  }
+
+  #hud.visible #topLeft {
+    backdrop-filter: blur(8px);
+    background: rgba(3,6,12,.22);
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(160,220,255,.14);
+    box-shadow: 0 0 25px rgba(0,0,0,.25);
+  }
+</style>
+
+<div id="p2-curtain-top" class="p2-curtain"></div>
+<div id="p2-curtain-bottom" class="p2-curtain"></div>
+
+<div id="p2-story-overlay">
+  <canvas id="p2-story-stars"></canvas>
+
+  <div id="p2-story-box">
+    <div id="p2-story-kicker">Before the game begins</div>
+    <h2 id="p2-story-title"></h2>
+    <p id="p2-story-text"></p>
+    <p id="p2-story-ku" dir="rtl"></p>
+
+    <div class="p2-buttons">
+      <button id="p2-back">Back</button>
+      <button id="p2-next">Next</button>
+      <button id="p2-begin" style="display:none;">Enter the World</button>
+      <button id="p2-skip">Skip Story</button>
+    </div>
+
+    <div id="p2-dots"></div>
+  </div>
+</div>
+
+<div id="p2-vignette"></div>
+<div id="p2-grain"></div>
+<div id="p2-flash"></div>
+<div id="p2-chapter"></div>
+<div id="p2-lore"></div>
+
+<script type="module">
+  (() => {
+    document.body.classList.add('p2-story');
+
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const storyOverlay = document.getElementById('p2-story-overlay');
+
+    if (!overlay || !startBtn || !storyOverlay) return;
+
+    const slides = [
+      {
+        title: 'Before the Darkness',
+        en: 'Long ago, a golden star fell into these mountains. Its light protected the valleys, the forests, and the memories of the people.',
+        ku: 'لە کۆنەوە، ئەستێرەیەکی زێڕین کەوتە ناو ئەم چیایانە. ڕووناکییەکەی دۆڵ و دارستانەکان و بیرەوەرییەکانی خەڵکی دەپاراست.'
+      },
+      {
+        title: 'The Night It Vanished',
+        en: 'One night, the star disappeared. With it went the dreams of children and the memories of the old.',
+        ku: 'شەوێک، ئەستێرەکە ون بوو. لەگەڵ ئەویشدا خەونی منداڵان و بیرەوەرییەکانی پیرەکان ون بوون.'
+      },
+      {
+        title: 'The Last Call',
+        en: 'A young keeper named Rojin heard a weak voice from the sky: “Find my shards... before the Shadow eats everything.”',
+        ku: 'پارێزەرێکی گەنج بە ناوی ڕۆژین دەنگێکی لاوازی لە ئاسمانەوە بیست: «پارچەکانم بدۆزەرەوە... پێش ئەوەی سێبەر هەموو شتێک بخوات.»'
+      },
+      {
+        title: 'The Shadow of Memory',
+        en: 'The Shadow is not only darkness. It is forgetting. It grows stronger when your light becomes weak.',
+        ku: 'سێبەر تەنیا تاریکی نییە. ئەو لەبیرکردنە. کاتێک ڕووناکییەکەت لاواز دەبێت، ئەو بەهێزتر دەبێت.'
+      },
+      {
+        title: 'Your Task',
+        en: 'Collect the 12 Light Shards. Keep your light alive. Return to the Star Shrine and restore the star.',
+        ku: '١٢ پارچەی ڕووناکی کۆبکەرەوە. ڕووناکییەکەت زیندوو ڕابگرە. بگەڕێوە بۆ پیرۆزگاکە و ئەستێرەکە بگەڕێنەرەوە.'
+      }
+    ];
+
+    let idx = 0;
+
+    const titleEl = document.getElementById('p2-story-title');
+    const textEl = document.getElementById('p2-story-text');
+    const kuEl = document.getElementById('p2-story-ku');
+    const dotsEl = document.getElementById('p2-dots');
+
+    const backBtn = document.getElementById('p2-back');
+    const nextBtn = document.getElementById('p2-next');
+    const beginBtn = document.getElementById('p2-begin');
+    const skipBtn = document.getElementById('p2-skip');
+
+    function renderSlide() {
+      const slide = slides[idx];
+
+      titleEl.textContent = slide.title;
+      textEl.textContent = slide.en;
+      kuEl.textContent = slide.ku;
+
+      dotsEl.innerHTML = slides
+        .map((_, i) => `<span class="${i === idx ? 'active' : ''}"></span>`)
+        .join('');
+
+      backBtn.disabled = idx === 0;
+      nextBtn.style.display = idx === slides.length - 1 ? 'none' : 'inline-block';
+      beginBtn.style.display = idx === slides.length - 1 ? 'inline-block' : 'none';
+    }
+
+    function finishStory() {
+      storyOverlay.classList.add('hidden');
+      document.body.classList.remove('p2-story');
+
+      const h1 = overlay.querySelector('h1');
+      const p = overlay.querySelector('p');
+      const small = overlay.querySelector('small');
+
+      if (h1) h1.textContent = 'The Lost Star';
+      if (p) p.textContent = 'The story is finished. The forest is dark, the star is silent, and the world is waiting for you.';
+      if (small) small.textContent = 'WASD / Arrows move | Mouse look | Shift sprint | Esc pause';
+
+      startBtn.textContent = 'Enter the World';
+      overlay.classList.remove('hidden');
+      startBtn.focus();
+    }
+
+    nextBtn.addEventListener('click', () => {
+      if (idx < slides.length - 1) idx++;
+      renderSlide();
+    });
+
+    backBtn.addEventListener('click', () => {
+      if (idx > 0) idx--;
+      renderSlide();
+    });
+
+    skipBtn.addEventListener('click', finishStory);
+    beginBtn.addEventListener('click', finishStory);
+
+    renderSlide();
+
+    const canvas = document.getElementById('p2-story-stars');
+    const ctx = canvas.getContext('2d');
+    let storyStars = [];
+
+    function resizeStoryCanvas() {
+      canvas.width = innerWidth;
+      canvas.height = innerHeight;
+
+      storyStars = Array.from({ length: 180 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.8 + 0.2,
+        tw: Math.random() * Math.PI * 2,
+        s: Math.random() * 0.03 + 0.01
+      }));
+    }
+
+    resizeStoryCanvas();
+    window.addEventListener('resize', resizeStoryCanvas);
+
+    function drawStoryStars() {
+      if (!storyOverlay.classList.contains('hidden')) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (const star of storyStars) {
+          star.tw += 0.02;
+          star.y -= star.s;
+
+          if (star.y < -2) {
+            star.y = canvas.height + 2;
+          }
+
+          const alpha = 0.25 + Math.abs(Math.sin(star.tw)) * 0.5;
+
+          ctx.fillStyle = `rgba(220,235,255,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      requestAnimationFrame(drawStoryStars);
+    }
+
+    drawStoryStars();
+
+    let ambientStarted = false;
+    let audioCtx;
+
+    function startAmbient() {
+      if (ambientStarted) return;
+      ambientStarted = true;
+
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        const master = audioCtx.createGain();
+        master.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        master.gain.linearRampToValueAtTime(0.035, audioCtx.currentTime + 6);
+        master.connect(audioCtx.destination);
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 700;
+        filter.connect(master);
+
+        [65.41, 98, 130.81, 196].forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          osc.type = i % 2 ? 'triangle' : 'sine';
+          osc.frequency.value = freq;
+
+          const gain = audioCtx.createGain();
+          gain.gain.value = 0.02 + i * 0.004;
+
+          const lfo = audioCtx.createOscillator();
+          lfo.frequency.value = 0.03 + i * 0.015;
+
+          const lfoGain = audioCtx.createGain();
+          lfoGain.gain.value = 0.012;
+
+          lfo.connect(lfoGain);
+          lfoGain.connect(gain.gain);
+
+          osc.connect(gain);
+          gain.connect(filter);
+
+          osc.start();
+          lfo.start();
+        });
+      } catch (e) {}
+    }
+
+    function showChapter(text) {
+      const el = document.getElementById('p2-chapter');
+      el.textContent = text;
+      el.classList.add('show');
+
+      setTimeout(() => {
+        el.classList.remove('show');
+      }, 4300);
+    }
+
+    function showLore(text) {
+      const el = document.getElementById('p2-lore');
+      el.textContent = text;
+      el.classList.add('show');
+
+      setTimeout(() => {
+        el.classList.remove('show');
+      }, 5200);
+    }
+
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement) {
+        document.body.classList.add('p2-playing');
+        startAmbient();
+
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        showChapter('Chapter 1 — The Last Light');
+      } else {
+        document.body.classList.remove('p2-playing');
+
+        if (audioCtx && audioCtx.state === 'running') {
+          audioCtx.suspend();
+        }
+      }
+    });
+
+    const shardsEl = document.getElementById('shards');
+    let lastLore = 0;
+
+    const loreByCount = {
+      3: 'The first memories stir... a child laughs somewhere in the old valley.',
+      6: 'The forest remembers footsteps that the world forgot.',
+      9: 'The Shadow grows restless. Hold onto your light.',
+      12: 'All shards are singing. Return to the Star Shrine!'
+    };
+
+    if (shardsEl) {
+      const shardObserver = new MutationObserver(() => {
+        const match = shardsEl.textContent.match(/\d+/);
+        const count = match ? parseInt(match[0], 10) : 0;
+
+        if (loreByCount[count] && count !== lastLore) {
+          lastLore = count;
+          showLore(loreByCount[count]);
+        }
+      });
+
+      shardObserver.observe(shardsEl, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+    }
+
+    const messageEl = document.getElementById('message');
+    let flashTimeout;
+
+    function flash(color) {
+      const el = document.getElementById('p2-flash');
+      el.style.boxShadow = `inset 0 0 170px 60px ${color}`;
+      el.classList.add('active');
+
+      clearTimeout(flashTimeout);
+      flashTimeout = setTimeout(() => {
+        el.classList.remove('active');
+      }, 450);
+    }
+
+    if (messageEl) {
+      const messageObserver = new MutationObserver(() => {
+        const txt = messageEl.textContent || '';
+
+        if (/shadow|faded|darkness/i.test(txt)) {
+          flash('rgba(255,45,80,.35)');
+        } else if (/shard|star|restored/i.test(txt)) {
+          flash('rgba(110,240,255,.22)');
+        }
+      });
+
+      messageObserver.observe(messageEl, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+    }
+
+    setInterval(() => {
+      const bar = document.getElementById('lightBarInner');
+      if (!bar) return;
+
+      const value = parseFloat(bar.style.width || '100');
+      document.body.classList.toggle('p2-low', value < 30);
+    }, 180);
+  })();
+</script>
 </body>
 </html>
